@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>刘芷溪舞蹈教学打卡</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slideRight {
+            from { transform: translateX(20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        .animate-slide-right { animation: slideRight 0.3s ease-out; }
+        
+        /* Custom scrollbar for modal */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.1/",
+    "react/": "https://esm.sh/react@^19.2.1/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.560.0",
+    "recharts": "https://esm.sh/recharts@^3.5.1"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="app" class="max-w-lg mx-auto bg-slate-50 min-h-screen relative shadow-2xl shadow-slate-200 flex flex-col">
+    <!-- Content will be injected here by JavaScript -->
+</div>
+
+<script>
+    // --- 1. Constants & Types ---
+    const STORAGE_KEY = 'dance_teaching_records_v1';
+    
+    const INSTITUTIONS = {
+        DI_LE_BEI_BEI: '迪乐贝贝',
+        IMPORT_EXPORT_BANK: '进出口银行',
+        OTHER: '其他'
+    };
+
+    const COLORS = ['#f43f5e', '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+
+    // --- 2. State Management ---
+    const initialState = {
+        records: [],
+        view: 'dashboard', // 'dashboard', 'add', 'edit'
+        
+        // Dashboard State
+        selectedMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
+        showOverview: false,
+
+        // Form/Wizard State
+        editingId: null, // ID of record being edited
+        wizardStep: 1,   // 1, 2, 3
+        
+        // Temporary Form Data
+        formData: {
+            date: '',
+            institution: '',
+            customInstitution: '',
+            amount: ''
+        }
+    };
+
+    let state = { ...initialState };
+
+    // --- 3. Storage Services ---
+    function loadRecords() {
+        try {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            console.error('Failed to load records', e);
+            return [];
+        }
+    }
+
+    function saveRecords(records) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        } catch (e) {
+            console.error('Failed to save records', e);
+        }
+    }
+
+    // Initialize State
+    state.records = loadRecords();
+    resetFormData(); // Set default date
+
+    // --- 4. Helper Functions ---
+    function resetFormData() {
+        state.formData = {
+            date: new Date().toISOString().split('T')[0],
+            institution: INSTITUTIONS.DI_LE_BEI_BEI,
+            customInstitution: '',
+            amount: ''
+        };
+        state.wizardStep = 1;
+    }
+
+    function generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substring(2);
+    }
+
+    function setState(newState) {
+        state = { ...state, ...newState };
+        render();
+    }
+
+    // --- 5. Logic Controllers ---
+    
+    // Navigation
+    function navigateToDashboard() {
+        setState({ view: 'dashboard', showOverview: false, editingId: null });
+    }
+
+    function navigateToAdd() {
+        resetFormData();
+        setState({ view: 'add', wizardStep: 1, editingId: null });
+    }
+
+    function navigateToEdit(recordId) {
+        const record = state.records.find(r => r.id === recordId);
+        if (!record) return;
+
+        state.formData = {
+            date: record.date,
+            institution: record.institution,
+            customInstitution: record.customInstitution || '',
+            amount: record.amount.toString()
+        };
+        setState({ view: 'edit', editingId: recordId });
+    }
+
+    // CRUD Actions
+    function addRecord() {
+        const newRecord = {
+            id: generateId(),
+            date: state.formData.date,
+            institution: state.formData.institution,
+            customInstitution: state.formData.institution === INSTITUTIONS.OTHER ? state.formData.customInstitution : undefined,
+            amount: Number(state.formData.amount),
+            timestamp: Date.now()
+        };
+        
+        const newRecords = [newRecord, ...state.records];
+        saveRecords(newRecords);
+        
+        // Update state and go back
+        state.records = newRecords;
+        navigateToDashboard();
+    }
+
+    function updateRecord() {
+        const updatedRecords = state.records.map(r => {
+            if (r.id === state.editingId) {
+                return {
+                    ...r,
+                    date: state.formData.date,
+                    institution: state.formData.institution,
+                    customInstitution: state.formData.institution === INSTITUTIONS.OTHER ? state.formData.customInstitution : undefined,
+                    amount: Number(state.formData.amount),
+                    timestamp: Date.now()
+                };
+            }
+            return r;
+        });
+
+        saveRecords(updatedRecords);
+        state.records = updatedRecords;
+        navigateToDashboard();
+    }
+
+    function deleteRecord() {
+        if (!confirm('确定要删除这条记录吗？')) return;
+        
+        const filteredRecords = state.records.filter(r => r.id !== state.editingId);
+        saveRecords(filteredRecords);
+        state.records = filteredRecords;
+        navigateToDashboard();
+    }
+
+    // --- 6. Render Functions (Components) ---
+
+    // Header Component
+    function renderHeader() {
+        return `
+            <header class="bg-white pt-10 pb-4 px-6 border-b border-slate-100 flex-none">
+                <h1 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-indigo-600">
+                    刘芷溪舞蹈教学打卡
+                </h1>
+                <p class="text-xs text-slate-400 mt-1">记录每一份耕耘与收获</p>
+            </header>
+        `;
+    }
+
+    // Dashboard Component
+    function renderDashboard() {
+        // Data Processing
+        const monthlyRecords = state.records
+            .filter(r => r.date.startsWith(state.selectedMonth))
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+        const totalIncome = monthlyRecords.reduce((sum, r) => sum + r.amount, 0);
+
+        // Chart Data Prep
+        const chartDataMap = {};
+        monthlyRecords.forEach(r => {
+            const name = r.institution === INSTITUTIONS.OTHER ? (r.customInstitution || '其他') : r.institution;
+            chartDataMap[name] = (chartDataMap[name] || 0) + r.amount;
+        });
+        const chartData = Object.entries(chartDataMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+
+        // Simple HTML Bar Chart Logic
+        const maxVal = Math.max(...chartData.map(d => d.value), 0) || 1;
+        const chartHTML = chartData.length > 0 ? `
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <h3 class="text-sm font-semibold text-slate-600 mb-4">收入构成</h3>
+                <div class="h-40 w-full flex items-end gap-2 px-2">
+                    ${chartData.map((d, i) => {
+                        const height = (d.value / maxVal) * 100;
+                        const color = COLORS[i % COLORS.length];
+                        return `
+                            <div class="flex-1 flex flex-col items-center group relative">
+                                <div class="w-full rounded-t-md transition-all duration-500 ease-out hover:opacity-80" 
+                                     style="height: ${height}%; background-color: ${color}; min-height: 4px;"></div>
+                                <span class="text-[10px] text-slate-400 mt-2 truncate w-full text-center">${d.name}</span>
+                                <!-- Tooltip -->
+                                <div class="absolute bottom-full mb-1 bg-slate-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                    ¥${d.value.toLocaleString()}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        ` : '';
+
+        // Records List
+        const recordsHTML = monthlyRecords.length === 0 
+            ? `<div class="text-center py-10 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">本月暂无打卡记录</div>`
+            : monthlyRecords.map(r => `
+                <div onclick="navigateToEdit('${r.id}')" 
+                     class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center active:bg-slate-50 transition-colors cursor-pointer group">
+                    <div>
+                        <div class="font-bold text-slate-800 text-lg mb-1 group-hover:text-rose-600 transition-colors">
+                            ${r.institution === INSTITUTIONS.OTHER ? r.customInstitution : r.institution}
+                        </div>
+                        <div class="text-xs text-slate-500 flex items-center gap-1">
+                            <span class="bg-slate-100 px-2 py-0.5 rounded text-slate-600">${r.date}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-rose-600 text-lg">+${r.amount.toLocaleString()}</span>
+                        <i data-lucide="edit-2" class="w-4 h-4 text-slate-300 group-hover:text-rose-400"></i>
+                    </div>
+                </div>
+            `).join('');
+
+        return `
+            ${renderHeader()}
+            <main class="flex-1 pb-10">
+                <!-- Filters & Overview -->
+                <div class="bg-white p-4 sticky top-0 z-10 shadow-sm border-b border-slate-100 flex justify-between items-center">
+                    <div class="flex items-center gap-2 text-slate-700">
+                        <i data-lucide="calendar" class="text-rose-500 w-5 h-5"></i>
+                        <input type="month" id="monthPicker" value="${state.selectedMonth}" 
+                            class="font-semibold bg-transparent outline-none text-slate-800 w-32 cursor-pointer">
+                    </div>
+                    <button onclick="setState({showOverview: true})" 
+                        class="flex items-center gap-1.5 text-sm font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-full hover:bg-rose-100 active:scale-95 transition-all">
+                        <i data-lucide="pie-chart" class="w-4 h-4"></i> 总览
+                    </button>
+                </div>
+
+                <div class="p-4 space-y-6 animate-fade-in">
+                    <!-- Add Button -->
+                    <button onclick="navigateToAdd()" 
+                        class="w-full bg-slate-900 text-white py-5 rounded-2xl shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-95 transition-all hover:bg-slate-800">
+                        <i data-lucide="plus-circle" class="text-rose-400 w-7 h-7"></i>
+                        <span class="text-xl font-bold tracking-wide">教学打卡</span>
+                    </button>
+
+                    <!-- Summary Card -->
+                    <div class="bg-gradient-to-br from-rose-500 to-rose-600 rounded-2xl p-6 text-white shadow-lg shadow-rose-200">
+                        <div class="flex items-center gap-2 opacity-90 mb-2">
+                            <i data-lucide="wallet" class="w-5 h-5"></i>
+                            <span class="font-medium text-sm">本月总收入</span>
+                        </div>
+                        <div class="text-4xl font-bold tracking-tight">
+                            ¥ ${totalIncome.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+
+                    ${chartHTML}
+
+                    <!-- List -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-slate-600 mb-3 px-1 flex justify-between items-center">
+                            <span>打卡记录</span>
+                            <span class="text-xs text-slate-400 font-normal">${monthlyRecords.length} 条</span>
+                        </h3>
+                        <div class="space-y-3">
+                            ${recordsHTML}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overview Modal -->
+                ${renderOverviewModal(chartData, totalIncome)}
+            </main>
+        `;
+    }
+
+    // Wizard Component (Add Mode)
+    function renderWizard() {
+        const { wizardStep, formData } = state;
+        const totalSteps = 3;
+        const progress = (wizardStep / totalSteps) * 100;
+        
+        let contentHTML = '';
+        
+        // Step 1: Date
+        if (wizardStep === 1) {
+            contentHTML = `
+                <div class="animate-slide-right">
+                    <h2 class="text-2xl font-black text-slate-800 mb-2">选择日期</h2>
+                    <p class="text-slate-400 mb-8">今天上课了吗？</p>
+                    <input type="date" id="wizardDate" value="${formData.date}" 
+                        class="w-full text-center text-xl font-bold p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-rose-500 focus:bg-white outline-none transition-all text-slate-700">
+                </div>
+            `;
+        } 
+        // Step 2: Institution
+        else if (wizardStep === 2) {
+            const instButtons = Object.values(INSTITUTIONS).map(type => {
+                const isSelected = formData.institution === type;
+                const activeClass = isSelected ? 'border-rose-500 bg-rose-50 text-rose-700 shadow-md' : 'border-slate-100 bg-white text-slate-600 hover:border-rose-200 hover:bg-slate-50';
+                return `
+                    <button onclick="updateWizardData('institution', '${type}')" 
+                        class="p-4 rounded-xl border-2 text-left font-bold text-lg transition-all flex justify-between items-center ${activeClass}">
+                        ${type}
+                        ${isSelected ? '<i data-lucide="check-circle-2" class="w-5 h-5 text-rose-500"></i>' : ''}
+                    </button>
+                `;
+            }).join('');
+            
+            contentHTML = `
+                <div class="animate-slide-right">
+                    <h2 class="text-2xl font-black text-slate-800 mb-2">选择机构</h2>
+                    <p class="text-slate-400 mb-8">在哪里上课？</p>
+                    <div class="flex flex-col gap-3">
+                        ${instButtons}
+                    </div>
+                    ${formData.institution === INSTITUTIONS.OTHER ? `
+                        <div class="mt-4 animate-slide-up">
+                            <input type="text" id="wizardCustomInst" value="${formData.customInstitution}" placeholder="请输入机构名称" autofocus
+                                class="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-rose-500 outline-none transition-all">
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } 
+        // Step 3: Amount
+        else if (wizardStep === 3) {
+            contentHTML = `
+                <div class="animate-slide-right">
+                    <h2 class="text-2xl font-black text-slate-800 mb-2">输入金额</h2>
+                    <p class="text-slate-400 mb-8">本次课程收入多少？</p>
+                    <div class="relative">
+                        <span class="absolute left-6 top-1/2 -translate-y-1/2 text-4xl text-slate-300 font-light">¥</span>
+                        <input type="number" id="wizardAmount" min="0" step="0.01" value="${formData.amount}" placeholder="0" autofocus
+                            class="w-full pl-16 pr-6 py-6 text-4xl font-bold bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-rose-500 focus:bg-white outline-none transition-all text-slate-800 placeholder-slate-200">
+                    </div>
+                </div>
+            `;
+        }
+
+        // Action Buttons Logic
+        const isNextDisabled = wizardStep === 2 && formData.institution === INSTITUTIONS.OTHER && !formData.customInstitution.trim();
+        const isSubmitDisabled = !formData.amount;
+
+        return `
+            ${renderHeader()}
+            <main class="flex-1 p-4 flex flex-col items-center justify-center">
+                <div class="w-full bg-white rounded-2xl shadow-xl p-8 w-full max-w-md mt-4 min-h-[400px] flex flex-col relative overflow-hidden">
+                    <!-- Progress Bar -->
+                    <div class="absolute top-0 left-0 w-full h-1.5 bg-slate-100">
+                        <div class="h-full bg-rose-500 transition-all duration-300 ease-out" style="width: ${progress}%"></div>
+                    </div>
+
+                    <!-- Close -->
+                    <button onclick="navigateToDashboard()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+
+                    <div class="flex-1 flex flex-col justify-center">
+                        ${contentHTML}
+                    </div>
+
+                    <!-- Navigation -->
+                    <div class="mt-8 flex gap-3">
+                        ${wizardStep > 1 ? `
+                            <button onclick="setWizardStep(${wizardStep - 1})" class="flex-none w-14 h-14 rounded-xl border-2 border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 flex items-center justify-center transition-all">
+                                <i data-lucide="arrow-left" class="w-6 h-6"></i>
+                            </button>
+                        ` : ''}
+                        
+                        ${wizardStep < 3 ? `
+                            <button onclick="nextWizardStep()" ${isNextDisabled ? 'disabled' : ''} 
+                                class="flex-1 bg-slate-900 text-white h-14 rounded-xl font-bold text-lg shadow-lg shadow-slate-200 flex items-center justify-center gap-2 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                                下一步 <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                            </button>
+                        ` : `
+                            <button onclick="addRecord()" ${isSubmitDisabled ? 'disabled' : ''}
+                                class="flex-1 bg-rose-600 text-white h-14 rounded-xl font-bold text-lg shadow-lg shadow-rose-200 flex items-center justify-center gap-2 hover:bg-rose-700 disabled:opacity-50 transition-all active:scale-95">
+                                确认打卡 <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                            </button>
+                        `}
+                    </div>
+                </div>
+            </main>
+        `;
+    }
+
+    // Edit Form Component
+    function renderEditForm() {
+        const { formData } = state;
+        return `
+            ${renderHeader()}
+            <main class="flex-1 p-4 animate-slide-up">
+                <div class="bg-white rounded-xl shadow-lg p-6 max-w-md mx-auto mt-4">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold text-slate-800">修改打卡记录</h2>
+                        <button onclick="navigateToDashboard()" class="text-slate-400 hover:text-slate-600">
+                            <i data-lucide="x" class="w-6 h-6"></i>
+                        </button>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">日期</label>
+                            <input type="date" id="editDate" value="${formData.date}" 
+                                class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">机构</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                ${Object.values(INSTITUTIONS).map(type => `
+                                    <button onclick="updateFormData('institution', '${type}')" 
+                                        class="px-2 py-2 text-sm rounded-lg border transition-all truncate ${formData.institution === type ? 'bg-rose-500 text-white border-rose-500 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+                                        ${type}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        ${formData.institution === INSTITUTIONS.OTHER ? `
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">机构名称</label>
+                                <input type="text" id="editCustomInst" value="${formData.customInstitution}" placeholder="例如: 私教课"
+                                    class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none">
+                            </div>
+                        ` : ''}
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">金额 (元)</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">¥</span>
+                                <input type="number" id="editAmount" value="${formData.amount}" min="0" step="0.01"
+                                    class="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none font-semibold text-slate-800">
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-3 pt-4">
+                            <button onclick="updateRecord()" class="w-full bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-xl font-semibold shadow-lg shadow-rose-200 flex items-center justify-center gap-2">
+                                <i data-lucide="save" class="w-5 h-5"></i> 保存修改
+                            </button>
+                            <button onclick="deleteRecord()" class="w-full bg-white border border-red-200 text-red-500 hover:bg-red-50 py-3 rounded-xl font-medium flex items-center justify-center gap-2">
+                                <i data-lucide="trash-2" class="w-5 h-5"></i> 删除记录
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        `;
+    }
+
+    // Modal Component
+    function renderOverviewModal(chartData, totalIncome) {
+        if (!state.showOverview) return '';
+
+        const listHTML = chartData.length === 0 
+            ? '<p class="text-slate-400 text-center py-4">暂无数据</p>' 
+            : chartData.map((item, i) => `
+                <div class="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-8 rounded-full" style="background-color: ${COLORS[i % COLORS.length]}"></div>
+                        <span class="font-medium text-slate-700">${item.name}</span>
+                    </div>
+                    <span class="font-bold text-slate-900 text-lg">¥ ${item.value.toLocaleString()}</span>
+                </div>
+            `).join('');
+
+        return `
+            <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-0">
+                <div onclick="setState({showOverview: false})" class="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in"></div>
+                <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 relative z-10 animate-slide-up mb-4 sm:mb-0">
+                    <button onclick="setState({showOverview: false})" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                    
+                    <h3 class="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                        <i data-lucide="pie-chart" class="text-rose-500 w-6 h-6"></i> 本月收入总览
+                    </h3>
+
+                    <div class="space-y-3 max-h-[60vh] overflow-y-auto hide-scrollbar">
+                        ${listHTML}
+                        <div class="flex justify-between items-center p-4 mt-4 border-t-2 border-dashed border-slate-100">
+                            <span class="font-bold text-slate-500">总计</span>
+                            <span class="font-black text-2xl text-rose-600">¥ ${totalIncome.toLocaleString()}</span>
+                        </div>
+                    </div>
+                    
+                    <button onclick="setState({showOverview: false})" class="w-full mt-6 bg-slate-900 text-white py-3 rounded-xl font-bold active:scale-95 transition-all">关闭</button>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- 7. Main Render Loop & Listeners ---
+    function render() {
+        const app = document.getElementById('app');
+        
+        if (state.view === 'dashboard') {
+            app.innerHTML = renderDashboard();
+        } else if (state.view === 'add') {
+            app.innerHTML = renderWizard();
+        } else if (state.view === 'edit') {
+            app.innerHTML = renderEditForm();
+        }
+
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Attach DOM Listeners for Inputs 
+        // (We need to capture input values before re-rendering or changing state)
+        
+        // Month Picker Listener
+        const monthPicker = document.getElementById('monthPicker');
+        if (monthPicker) {
+            monthPicker.addEventListener('change', (e) => {
+                setState({ selectedMonth: e.target.value });
+            });
+        }
+
+        // Wizard Inputs
+        const wDate = document.getElementById('wizardDate');
+        if (wDate) wDate.addEventListener('input', (e) => updateFormData('date', e.target.value));
+
+        const wCustom = document.getElementById('wizardCustomInst');
+        if (wCustom) wCustom.addEventListener('input', (e) => updateFormData('customInstitution', e.target.value));
+        
+        const wAmount = document.getElementById('wizardAmount');
+        if (wAmount) wAmount.addEventListener('input', (e) => updateFormData('amount', e.target.value));
+
+        // Edit Inputs
+        const eDate = document.getElementById('editDate');
+        if (eDate) eDate.addEventListener('change', (e) => updateFormData('date', e.target.value));
+
+        const eCustom = document.getElementById('editCustomInst');
+        if (eCustom) eCustom.addEventListener('input', (e) => updateFormData('customInstitution', e.target.value));
+
+        const eAmount = document.getElementById('editAmount');
+        if (eAmount) eAmount.addEventListener('input', (e) => updateFormData('amount', e.target.value));
+    }
+
+    // --- 8. Specific Helpers for Inputs ---
+    function updateFormData(key, value) {
+        state.formData = { ...state.formData, [key]: value };
+        // We do NOT call render() here for text inputs to avoid losing focus/cursor position
+        // Only render if needed (like clicking a button)
+        
+        // For buttons that change visuals (like Institution selector), we do render
+        if (key === 'institution') render();
+    }
+
+    // Wizard specific update logic
+    function updateWizardData(key, value) {
+        state.formData = { ...state.formData, [key]: value };
+        render(); // Re-render to show selection
+    }
+
+    function setWizardStep(step) {
+        setState({ wizardStep: step });
+    }
+
+    function nextWizardStep() {
+        if (state.wizardStep === 2 && state.formData.institution === INSTITUTIONS.OTHER && !state.formData.customInstitution.trim()) {
+            return; // Validation
+        }
+        setWizardStep(state.wizardStep + 1);
+    }
+
+    // --- Start App ---
+    render();
+
+</script>
+</body>
+</html>
